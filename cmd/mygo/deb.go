@@ -21,7 +21,7 @@ import (
 
 // Linux configures Linux packaging.
 type Linux struct {
-	// Maintainer of the Debian package and of the PKGBUILD, "Name
+	// Maintainer of the Debian and RPM packages and of the PKGBUILD, "Name
 	// <email>" (default: the author in package.json, else the app's
 	// name).
 	Maintainer string `json:"maintainer"`
@@ -31,8 +31,9 @@ type Linux struct {
 	// Categories of the desktop entry (default Utility).
 	Categories []string `json:"categories"`
 	// Depends lists Debian packages the app needs besides GTK and
-	// WebKitGTK. The PKGBUILD depends on the Arch Linux packages of those
-	// archPackages knows.
+	// WebKitGTK. The RPM package depends on the Fedora packages of those
+	// rpmPackages knows, and the PKGBUILD on the Arch Linux packages of
+	// those archPackages knows.
 	Depends []string `json:"depends"`
 	// WebView false says that the app shows no web page, in a window or a
 	// ui.WebView, as an app of native UI: its packages depend on GTK
@@ -41,7 +42,7 @@ type Linux struct {
 	WebView *bool `json:"webview"`
 	// Command is the name of a command that runs the app, or a list of
 	// names, as ["my-app", "ma"], which adds a short one: a link in
-	// /usr/bin from the Debian package and the PKGBUILD, and in
+	// /usr/bin from the Debian and RPM packages and the PKGBUILD, and in
 	// ~/.local/bin from install.sh, for each, which says to run the app
 	// by the first it links. Empty means none, and the app opens from the
 	// applications menu.
@@ -98,22 +99,25 @@ func debVersion(v string) string {
 	return strings.ReplaceAll(v, "+", "~")
 }
 
-// writeDeb packages the Linux app in stage, the executable name and the
-// files next to it, as a Debian package: the app in /opt/<name>, a link in
-// /usr/bin for each name of linux.command, its desktop entry and icons. It
-// returns the package's path.
-func writeDeb(c *Config, stage, name, goarch string, app []string) (string, error) {
-	arch, ok := debArch[goarch]
-	if !ok {
-		return "", fmt.Errorf("no Debian architecture for %s", goarch)
-	}
-	data := newTarGz()
+// linuxFile is an entry that the Linux packages install, by its path from
+// the root, without a leading slash.
+type linuxFile struct {
+	path string
+	dir  bool
+	link string // the target of a link
+	data []byte
+	mode int64 // 755 for directories and programs, 644 for the other files
+}
+
+// linuxPackageFiles returns what the Linux packages install of the app in
+// stage, the executable name and the files next to it: the app in
+// /opt/<name>, a link in /usr/bin for each name of linux.command, the MIME
+// package of the types the app defines, its desktop entry and icons. The
+// directories listed are the app's own, in /opt/<name>; the packages of
+// the system own the others.
+func linuxPackageFiles(c *Config, stage, name string, app []string) ([]linuxFile, error) {
 	opt := "opt/" + name
-	for _, dir := range []string{"opt", opt, "usr", "usr/share", "usr/share/applications"} {
-		data.dir(dir)
-	}
-	size := int64(0)
-	md5sums := &bytes.Buffer{}
+	files := []linuxFile{{path: opt, dir: true, mode: 0o755}}
 	for _, entry := range optEntries(app, name) {
 		err := filepath.WalkDir(filepath.Join(stage, entry), func(p string, d fs.DirEntry, err error) error {
 			if err != nil {
@@ -127,13 +131,13 @@ func writeDeb(c *Config, stage, name, goarch string, app []string) (string, erro
 			}
 			switch {
 			case d.IsDir():
-				data.dir(target)
+				files = append(files, linuxFile{path: target, dir: true, mode: 0o755})
 			case info.Mode()&fs.ModeSymlink != 0:
 				link, err := os.Readlink(p)
 				if err != nil {
 					return err
 				}
-				data.link(target, link)
+				files = append(files, linuxFile{path: target, link: link, mode: 0o777})
 			default:
 				b, err := os.ReadFile(p)
 				if err != nil {
@@ -143,45 +147,68 @@ func writeDeb(c *Config, stage, name, goarch string, app []string) (string, erro
 				if info.Mode()&0o111 != 0 {
 					mode = 0o755
 				}
-				data.file(target, b, mode)
-				size += int64(len(b))
-				fmt.Fprintf(md5sums, "%x  %s\n", md5.Sum(b), target)
+				files = append(files, linuxFile{path: target, data: b, mode: mode})
 			}
 			return nil
 		})
 		if err != nil {
-			return "", err
+			return nil, err
 		}
-	}
-	if len(c.Linux.Command) > 0 {
-		data.dir("usr/bin")
 	}
 	for _, command := range c.Linux.Command {
-		data.link("usr/bin/"+command, "../../"+opt+"/"+name)
+		files = append(files, linuxFile{path: "usr/bin/" + command, link: "../../" + opt + "/" + name, mode: 0o777})
 	}
 	if xml := mimePackage(c); xml != "" {
-		// Types the app defines; the shared-mime-info trigger registers them.
-		for _, d := range []string{"usr/share/mime", "usr/share/mime/packages"} {
-			data.dir(d)
-		}
-		data.file("usr/share/mime/packages/"+name+".xml", []byte(xml), 0o644)
-		fmt.Fprintf(md5sums, "%x  usr/share/mime/packages/%s.xml\n", md5.Sum([]byte(xml)), name)
+		// Types the app defines, which the triggers of shared-mime-info
+		// register.
+		files = append(files, linuxFile{path: "usr/share/mime/packages/" + name + ".xml", data: []byte(xml), mode: 0o644})
 	}
 	// The entry runs the app by its path, with or without a command.
-	desktop := []byte(linuxDesktopEntry(c, "/"+opt+"/"+name, name))
-	data.file("usr/share/applications/"+name+".desktop", desktop, 0o644)
-	fmt.Fprintf(md5sums, "%x  usr/share/applications/%s.desktop\n", md5.Sum(desktop), name)
+	desktop := linuxDesktopEntry(c, "/"+opt+"/"+name, name)
+	files = append(files, linuxFile{path: "usr/share/applications/" + name + ".desktop", data: []byte(desktop), mode: 0o644})
 	icons, err := linuxIcons(c)
+	if err != nil {
+		return nil, err
+	}
+	for _, icon := range icons {
+		files = append(files, linuxFile{path: icon.dir() + "/" + name + ".png", data: icon.png, mode: 0o644})
+	}
+	return files, nil
+}
+
+// writeDeb packages the Linux app in stage, the executable name and the
+// files next to it, as a Debian package of linuxPackageFiles, with the
+// directories they are in. It returns the package's path.
+func writeDeb(c *Config, stage, name, goarch string, app []string) (string, error) {
+	arch, ok := debArch[goarch]
+	if !ok {
+		return "", fmt.Errorf("no Debian architecture for %s", goarch)
+	}
+	files, err := linuxPackageFiles(c, stage, name, app)
 	if err != nil {
 		return "", err
 	}
-	for _, icon := range icons {
-		dir := icon.dir()
-		for _, d := range []string{"usr/share/icons", "usr/share/icons/hicolor", path.Dir(dir), dir} {
+	data := newTarGz()
+	size := int64(0)
+	md5sums := &bytes.Buffer{}
+	for _, f := range files {
+		var parents []string
+		for d := path.Dir(f.path); d != "."; d = path.Dir(d) {
+			parents = append(parents, d)
+		}
+		for _, d := range slices.Backward(parents) {
 			data.dir(d)
 		}
-		data.file(dir+"/"+name+".png", icon.png, 0o644)
-		fmt.Fprintf(md5sums, "%x  %s/%s.png\n", md5.Sum(icon.png), dir, name)
+		switch {
+		case f.dir:
+			data.dir(f.path)
+		case f.link != "":
+			data.link(f.path, f.link)
+		default:
+			data.file(f.path, f.data, f.mode)
+			size += int64(len(f.data))
+			fmt.Fprintf(md5sums, "%x  %s\n", md5.Sum(f.data), f.path)
+		}
 	}
 
 	depends := c.Linux.debDepends()

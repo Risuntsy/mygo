@@ -5423,8 +5423,16 @@ renderer's (`gputest.Compare`).
   maps the Debian dependencies through `archPackages`, warning about
   those it lacks, and `options` keeps the executable unstripped. Every
   value is quoted for the shell, and `-upload` leaves it out (`uploads`
-  takes only known kinds). Packages hold the same files as
-  the update archive; apps installed by a package manager do not update
+  takes only known kinds). Linux also gets an RPM package written in
+  pure Go (`rpm.go`) of the same files, which `linuxPackageFiles` lists
+  for both: RPM's version 4 format, a lead, a signature header with the
+  SHA-1 and SHA-256 of the main header and the MD5 of it and the
+  payload, and the main header, each with its immutable region, then a
+  gzip compressed `newc` cpio payload, unsigned. It owns `/opt/<name>`
+  and the files, and leaves the directories they are in to the system,
+  whose file triggers register them; its `Requires` are the Fedora
+  packages (`rpmPackages`) of the Debian dependencies. Packages hold the
+  same files as the update archive; apps installed by a package manager do not update
   themselves (`Updater.Enabled` checks that the app can write where it is
   installed). Every Linux build also gets `install.sh`
   (`installscript.go`), a POSIX sh script, the same for every

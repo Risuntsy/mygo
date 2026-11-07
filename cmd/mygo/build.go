@@ -33,7 +33,7 @@ at mygo://localhost/. macOS gets a signed .app bundle and a
 the name in lower case), without the arch for darwin/universal, whose
 window invites dragging the app to Applications; other platforms get an
 executable. Linux also gets a Debian
-package, the app as <slug>-<version>-linux-<arch>.tar.gz with
+package and an RPM package, the app as <slug>-<version>-linux-<arch>.tar.gz with
 install.sh, which installs it for the user in ~/.local, where it can update
 itself, and a PKGBUILD, from which makepkg -si packages the archive for
 Arch Linux and installs it. The contents of the
@@ -415,6 +415,13 @@ func buildPlatform(c *Config, goos, goarch string, opts buildOptions) ([]string,
 			return nil, err
 		}
 		artifacts = append(artifacts, deb)
+	}
+	if _, ok := rpmArch[goarch]; goos == "linux" && ok {
+		rpm, err := writeRPM(c, stage, c.slug(), goarch, installed)
+		if err != nil {
+			return nil, err
+		}
+		artifacts = append(artifacts, rpm)
 	}
 	files, err := writeArchive(c, stage, target, installed)
 	if err != nil {

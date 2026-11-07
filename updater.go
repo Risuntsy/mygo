@@ -119,7 +119,7 @@ type Update struct {
 
 // Enabled reports whether the app can update itself: it was built with
 // updates and can write where it is installed. Apps installed by a package
-// manager, such as a .deb in /opt, are updated by it instead.
+// manager, such as a .deb or .rpm in /opt, are updated by it instead.
 func (u *UpdaterModule) Enabled() bool {
 	if packageUpdateFeed == "" || packageUpdateKey == "" || IsDev() {
 		return false

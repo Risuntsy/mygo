@@ -71,7 +71,7 @@ func TestArchDepends(t *testing.T) {
 		{new(false), []string{"libnotify4", "libasound2t64 (>= 1.2)", "libfoo1 | libsecret-1-0:any", "libgtk-3-0", "libfoo2"}, []string{"gtk3", "libnotify", "alsa-lib", "libsecret"}, []string{"libfoo2"}},
 	} {
 		l := Linux{WebView: tc.webview, Depends: tc.depends}
-		got, unknown := l.archDepends()
+		got, unknown := l.dependsIn(archPackages)
 		if !slices.Equal(got, tc.want) || !slices.Equal(unknown, tc.wantUnknown) {
 			t.Errorf("Debian %q: depends %q, unknown %q; want %q, %q", l.debDepends(), got, unknown, tc.want, tc.wantUnknown)
 		}

@@ -49,18 +49,19 @@ var archPackages = map[string]string{
 	"git":                        "git",
 }
 
-// archDepends returns the Arch Linux packages the app depends on, those of
-// debDepends, and the Debian packages that have none archPackages knows.
-// A Debian dependency is one package, with its version and architecture
-// left out, or alternatives, of which the first that has one counts.
-func (l *Linux) archDepends() (depends, unknown []string) {
+// dependsIn returns the packages of another distribution the app depends
+// on, those that packages, as archPackages, maps the Debian packages of
+// debDepends to, and the Debian packages that it maps to none. A Debian
+// dependency is one package, with its version and architecture left out,
+// or alternatives, of which the first that has one counts.
+func (l *Linux) dependsIn(packages map[string]string) (depends, unknown []string) {
 	for _, dep := range l.debDepends() {
 		found := ""
 		for alt := range strings.SplitSeq(dep, "|") {
 			deb, _, _ := strings.Cut(strings.TrimSpace(alt), " ")
 			deb, _, _ = strings.Cut(deb, "(")
 			deb, _, _ = strings.Cut(deb, ":")
-			if found = archPackages[strings.TrimSuffix(deb, "t64")]; found != "" {
+			if found = packages[strings.TrimSuffix(deb, "t64")]; found != "" {
 				break
 			}
 		}
@@ -222,7 +223,7 @@ func writePKGBUILD(c *Config, stage, name, goarch string, app []string, archive 
 			return nil, err
 		}
 	}
-	depends, unknown := c.Linux.archDepends()
+	depends, unknown := c.Linux.dependsIn(archPackages)
 	for _, dep := range unknown {
 		warnf("Leaving %s out of the PKGBUILD's dependencies: it is a Debian package with no Arch Linux package known for it", dep)
 	}

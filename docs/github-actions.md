@@ -88,7 +88,7 @@ git push origin v1.2.0
 The draft release job creates the draft release `v1.2.0`. Then the build
 job runs once for each row of its matrix, at the same time, and each
 uploads to the draft: the macOS disk images, the Windows installers, and
-the Linux archives, Debian packages and install script, each with their
+the Linux archives, Debian and RPM packages and install script, each with their
 updates.
 Review the draft and publish it: apps then update to it.
 
@@ -344,6 +344,7 @@ to check that the apps build:
             build/*/*.dmg
             build/*/*-setup-*.exe
             build/*/*.deb
+            build/*/*.rpm
             build/*/*.tar.gz
 ```
 

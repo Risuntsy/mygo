@@ -346,5 +346,5 @@ An app replaces itself, so it must be able to write where it is installed:
   [`install.sh`](distribution.md#the-install-script) installs the app, or
   the extracted build.
 
-Apps installed by a package manager, such as the Debian package in
+Apps installed by a package manager, such as the Debian or RPM package in
 `/opt`, are updated by it instead: `Enabled` is false for them.

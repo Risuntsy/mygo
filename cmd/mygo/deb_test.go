@@ -189,8 +189,8 @@ func TestLinuxCommandJSON(t *testing.T) {
 }
 
 // TestBuildLinuxSlug builds an app with a slug of its own, which names the
-// executable, the Debian package and its directory, the update archive,
-// the PKGBUILD and install.sh's files and variables.
+// executable, the Debian and RPM packages and their directory, the update
+// archive, the PKGBUILD and install.sh's files and variables.
 func TestBuildLinuxSlug(t *testing.T) {
 	if testing.Short() {
 		t.Skip("building the app")
@@ -218,7 +218,7 @@ func TestBuildLinuxSlug(t *testing.T) {
 		t.Fatal(err)
 	}
 	out := filepath.Join(dir, "build", "linux-amd64")
-	for _, name := range []string{"cloud-music", "cloud-music.desktop", "cloud-music-0.1.0-linux-amd64.tar.gz", "cloud-music_0.1.0_amd64.deb", pkgbuildName} {
+	for _, name := range []string{"cloud-music", "cloud-music.desktop", "cloud-music-0.1.0-linux-amd64.tar.gz", "cloud-music_0.1.0_amd64.deb", "cloud-music-0.1.0-1.x86_64.rpm", pkgbuildName} {
 		if _, err := os.Stat(filepath.Join(out, name)); err != nil {
 			t.Error(err)
 		}
